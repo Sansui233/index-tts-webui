@@ -27,3 +27,11 @@
 - `webui3/data/migrations/live-verification.json`：真实 API 测试生成的项目/session/task ID、合并时长、字幕和卸载结果。
 
 新数据均在 `webui3/data`，旧 outputs 未迁移删除或覆盖。已有根目录及 webui2 工作区修改保持不变。
+
+## 2026-10-31 并发推理（continuous batching）
+
+- 一致性（`uv run scripts/bench_batch.py`）：贪心解码下，`indextts/batch.py` 与原 `inference_speech` 逐 token 一致：单句 8 组（2 音色 × 4 句），混批 4 句（不同音色、不同长度、第 20 步中途加入）。
+- 吞吐（RTX 4060 Laptop 8GB，同机另有进程占约 3GB；采样，24 行）：8 句并发 best-of-3 用 7.73 秒，原路径 beam 3 串行 22.76 秒；显存峰值 2.58 GiB（含权重约 1.9 GiB）。
+- 端到端（临时数据目录）：旧路径 speech 任务运行中并发 4 个 API 调用，短句 1.7 秒先返回，旧任务同时完成；取消 0.1 秒生效；卸载等调度器空闲后执行，之后 API 自动重新加载。同一 8 句台本：普通推理 25.9 秒，并发推理 9.6 秒，8 个 take 全部保存。
+- 后端 27 个 unittest、前端类型检查与 build 通过。
+- 未验证：beam、纯采样、best-of-3 的听感对比。

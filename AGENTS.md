@@ -38,6 +38,7 @@ Index tts webui (formerly webui3), now the repository root project. backend/ (Fa
     - `voice` 可用 API 中保存的音色名，也可用服务器上任意参考音频（id 或 samples 相对路径）；`GET /tts/<slug>/voices` 列出可用值。保存的音色只是快捷方式，不是白名单。
     - API 生成的音频不保存：临时文件发送后即删除，不建 audio 记录；每次调用打印日志。
     - POST 接受 JSON，也接受表单 / URL 参数（听书软件只能这样发送）。
+    - API 总是走 `indextts/batch.py` 的逐步调度（continuous batching，网页上的「并发推理」模式 `mode: "batch"` 同此），不进串行任务队列，与旧 beam 路径并行；`num_beams` 在此表示 best-of-N。`backend/engine.py` 的 `Gate` 读写锁：两条推理路径共享，加载/卸载/字幕独占。一致性与吞吐：`uv run scripts/bench_batch.py`。
     - 听书配置：把保存的音色生成为 阅读（legado）、服务端阅读（hectorqin/reader，同 legado 格式）、爱阅记 的朗读引擎配置，格式参考 yy4382/tts-importer（`backend/profiles.py`）；支持网络导入 `/tts/<slug>/profile/<app>`。
 
 2. 界面设计

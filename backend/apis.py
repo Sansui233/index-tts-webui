@@ -123,7 +123,7 @@ class Apis:
         or None). Nothing is registered or kept; the caller deletes the file once sent."""
         settings = S.Generation(**{**api["generation"], **(overrides or {})}).model_dump()
         handoff, start = Handoff(), monotonic()
-        task = self.generation.speak(self.resolve(api, voice), text, settings, "api", api["name"], handoff.deliver)
+        task = self.generation.speak(self.resolve(api, voice), text, settings, "api", api["name"], handoff.deliver, batched=True)
         finished = self.tasks.wait(task["id"], WAIT)
         if finished is None:
             self.tasks.cancel(task["id"])

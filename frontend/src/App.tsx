@@ -267,7 +267,7 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
       actions={
         <>
           <button
-            className={cx("tip btn btn-ghost btn-icon", selected && "bg-hover text-fg")}
+            className={cx("tip tip-below btn btn-ghost btn-icon", selected && "bg-hover text-fg")}
             data-tip={selected ? "退出多选" : "多选"}
             aria-label="多选"
             disabled={!finished.length}
@@ -277,7 +277,7 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
           </button>
           {!selected && (
             <button
-              className="tip btn btn-ghost btn-icon btn-danger"
+              className="tip tip-below btn btn-ghost btn-icon btn-danger"
               data-tip="清除已结束的任务"
               aria-label="清除已结束的任务"
               disabled={!finished.length}

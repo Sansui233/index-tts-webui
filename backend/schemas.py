@@ -27,7 +27,9 @@ class Binding(Input):
 
 
 class Generation(Input):
-    mode: Literal["normal", "fast"] = "normal"
+    # normal / fast: original decoder (beam), serial queue. batch: continuous batching beside
+    # it, num_beams = best-of-N. External API calls always batch.
+    mode: Literal["normal", "fast", "batch"] = "normal"
     do_sample: bool = True
     top_p: float = Field(default=0.8, gt=0, le=1)
     top_k: int = Field(default=30, ge=0)

@@ -41,6 +41,17 @@ class FakeEngine:
             audio.setframerate(24000)
             audio.writeframes(b"\0\0" * 240)
 
+    def synthesize_many(self, items, progress, saved=None):
+        self.batches = getattr(self, "batches", []) + [len(items)]
+        for index, (source, text, path, settings) in enumerate(items):
+            if self.fail and index:  # the first line succeeds, the second fails
+                raise ValueError("test failure")
+            fail, self.fail = self.fail, False
+            self.infer(source, text, path, settings, progress)
+            self.fail = fail
+            if saved:
+                saved(index)
+
 
 class TakeTests(unittest.TestCase):
     def setUp(self):
@@ -287,6 +298,33 @@ class TakeTests(unittest.TestCase):
         folder = self.take_path(line, take).parents[2]
         self.assertFalse((folder / "index.json").exists())
         self.assertEqual(session["id"], folder.name)
+
+    def use_batch_mode(self):
+        session = self.request("GET", self.base)
+        body = {k: session[k] for k in ("name", "project_id", "bindings", "interval")}
+        self.request("PUT", self.base, {**body, "generation": {**session["generation"], "mode": "batch"}})
+
+    def test_batch_mode_generates_all_lines_in_one_call(self):
+        self.use_batch_mode()
+        task = self.request("POST", self.base + "/generate")
+        self.assertEqual(self.finish(task)["status"], "succeeded")
+        self.assertEqual(self.engine.batches, [2])
+        lines = self.request("GET", self.base)["lines"]
+        for line in lines:
+            take = line["takes"][-1]
+            self.assertEqual(line["current_take_id"], take["id"])
+            self.assertTrue(self.take_path(line, take).is_file())
+
+    def test_batch_mode_failure_keeps_finished_lines(self):
+        self.use_batch_mode()
+        self.engine.fail = True
+        task = self.request("POST", self.base + "/generate")
+        self.assertEqual(self.finish(task)["status"], "failed")
+        first, second = self.request("GET", self.base)["lines"]
+        self.assertEqual(len(first["takes"]), 1)
+        self.assertEqual(second["takes"], [])
+        folder = self.take_path(first, first["takes"][0]).parent.parent
+        self.assertEqual(len(list(folder.rglob("*.wav"))), 1)  # the failed line's file is gone
 
 
 if __name__ == "__main__":

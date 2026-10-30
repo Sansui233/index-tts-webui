@@ -308,7 +308,7 @@ function ApiEditor({ draft: initial, onClose, onSaved }: { draft: Draft; onClose
           启用（停用后地址返回 404，配置保留）
         </label>
         <div>
-          <span className="label">推理参数（调用方可在 POST 的 generation 中逐项覆盖）</span>
+          <span className="label">推理参数（调用方可在 POST 的 generation 中逐项覆盖；API 总是并发推理，所选模式不生效，Beams 表示 best-of-N）</span>
           <GenerationParams value={draft.generation} onChange={(generation) => setDraft({ ...draft, generation })} />
         </div>
       </div>

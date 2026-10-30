@@ -37,7 +37,7 @@ A project's sessions are the session records whose `project_id` matches; a proje
   "name": "05-01",
   "project_id": "…" | null,
   "bindings": [{ "speaker": "卡维", "role_id": "…" | null, "audio_id": "…" | null }],
-  "generation": { "mode": "normal", "top_p": 0.8, "…": "…" },
+  "generation": { "mode": "normal" | "fast" | "batch", "top_p": 0.8, "…": "…" },
   "interval": 0.5,
   "lines": [Line, …],
   "next_index": 52,

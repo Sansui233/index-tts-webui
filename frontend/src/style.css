@@ -125,6 +125,14 @@
   }
 }
 
+/* Add to .tip in a header pinned to the window top (e.g. Sheet actions): opens below,
+   aligned to the element's right edge so it stays inside the window. */
+@utility tip-below {
+  &::after {
+    @apply top-[calc(100%+6px)] right-0 bottom-auto left-auto translate-x-0;
+  }
+}
+
 /* Add to .tip for a long explanation: wraps at 15rem, opens below (so headers above a
    scrolling panel can't cover it), aligned to the element's right edge.
    (after: variants would reset `content`, so the overrides live here.) */

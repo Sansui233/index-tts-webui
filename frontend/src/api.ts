@@ -23,7 +23,7 @@ export interface Binding {
   audio_id: string | null;
 }
 export interface Generation {
-  mode: "normal" | "fast";
+  mode: "normal" | "fast" | "batch";
   do_sample: boolean;
   top_p: number;
   top_k: number;

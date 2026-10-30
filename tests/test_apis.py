@@ -22,6 +22,8 @@ class Engine:
         self.output = Path(output)
         Path(output).write_bytes(b"RIFF" + text.encode())
 
+    synthesize = infer  # the batched path API calls take
+
 
 class ApiTest(unittest.TestCase):
     def setUp(self):

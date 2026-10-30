@@ -98,6 +98,12 @@ const NUMBERS: [keyof Generation, string, number][] = [
   ["sentences_bucket_max_size", "批次大小", 1],
 ];
 
+export const MODE_LABELS: Record<Generation["mode"], string> = { normal: "普通推理", fast: "批次推理", batch: "并发推理" };
+
+// Fields a mode ignores: bucketing is fast-only; batch samples best-of-N rows, so no length penalty.
+const hidden = (key: keyof Generation, mode: Generation["mode"]) =>
+  (key === "sentences_bucket_max_size" && mode !== "fast") || (key === "length_penalty" && mode === "batch");
+
 export function GenerationParams({ value, onChange, open: initial = false }: { value: Generation; onChange: (g: Generation) => void; open?: boolean }) {
   const [open, setOpen] = useState(initial);
   const set = (patch: Partial<Generation>) => onChange({ ...value, ...patch });
@@ -108,8 +114,9 @@ export function GenerationParams({ value, onChange, open: initial = false }: { v
           value={value.mode}
           onChange={(mode) => set({ mode })}
           options={[
-            { value: "normal", label: "普通推理" },
-            { value: "fast", label: "批次推理", title: "长文本更快" },
+            { value: "normal", label: MODE_LABELS.normal },
+            { value: "fast", label: MODE_LABELS.fast, title: "长文本更快" },
+            { value: "batch", label: MODE_LABELS.batch, title: "多句同时解码，不排队；Beams 作为 best-of-N 采样。台本批量生成最快" },
           ]}
         />
         <button className="btn btn-ghost btn-sm" onClick={() => setOpen(!open)}>
@@ -124,8 +131,8 @@ export function GenerationParams({ value, onChange, open: initial = false }: { v
             <input type="checkbox" className="accent-[var(--accent)]" checked={value.do_sample} onChange={(e) => set({ do_sample: e.target.checked })} />
             启用采样（do_sample）
           </label>
-          {NUMBERS.filter(([key]) => key !== "sentences_bucket_max_size" || value.mode === "fast").map(([key, label, step]) => (
-            <Field key={key} label={label}>
+          {NUMBERS.filter(([key]) => !hidden(key, value.mode)).map(([key, label, step]) => (
+            <Field key={key} label={key === "num_beams" && value.mode === "batch" ? "Best-of-N" : label}>
               <input className="input h-7 tabular-nums" type="number" step={step} value={value[key] as number} onChange={(e) => set({ [key]: Number(e.target.value) })} />
             </Field>
           ))}

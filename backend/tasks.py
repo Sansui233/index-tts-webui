@@ -1,4 +1,5 @@
-"""Single worker owns every GPU operation. Queue metadata survives restarts."""
+"""A single worker runs queued tasks in order; concurrent tasks (external API calls, which
+batch on the engine's own thread) run beside it. Queue metadata survives restarts."""
 
 from datetime import datetime, timedelta, timezone
 from queue import Queue
@@ -57,8 +58,10 @@ class Tasks:
                 pass
         return (task.get("result") or {}).get("name") or ""
 
-    def submit(self, kind, function, session_ids=(), audio_ids=(), title="", line_ids=()):
-        """Queue `function(progress)`; progress(value, desc) raises Cancelled."""
+    def submit(self, kind, function, session_ids=(), audio_ids=(), title="", line_ids=(), concurrent=False):
+        """Queue `function(progress)`; progress(value, desc) raises Cancelled. A `concurrent`
+        task runs on its own thread at once instead of waiting for the serial worker (its
+        function must do its own GPU coordination, as Engine.synthesize does)."""
         with self.store.lock:
             if self.closed:
                 raise ValueError("服务正在停止")
@@ -78,7 +81,10 @@ class Tasks:
                     "cancel_requested": False,
                 },
             )
-            self.queue.put((task["id"], function))
+            if concurrent:
+                Thread(target=self._execute, args=(task["id"], function), daemon=True).start()
+            else:
+                self.queue.put((task["id"], function))
             return task
 
     def delete(self, ids=None):
@@ -138,25 +144,28 @@ class Tasks:
 
     def _run(self):
         while (item := self.queue.get()) is not None:
-            key, function = item
             try:
-                with self.store.lock:
-                    task = self.store.get("tasks", key)
-                    if task["cancel_requested"]:
-                        continue
-                    task.update(status="running", started_at=now())
-                    self.store.save("tasks", task)
-                result = function(
-                    lambda value=None, desc="": self.progress(key, value, desc)
-                )
-                self.progress(key, 1, "完成")
-                self._finish(key, "succeeded", result=result)
-            except Cancelled:
-                self._finish(key, "cancelled", message="已取消")
-            except Exception as error:
-                self._finish(key, "failed", error=str(error), message=str(error))
+                self._execute(*item)
             finally:
                 self.queue.task_done()
+
+    def _execute(self, key, function):
+        try:
+            with self.store.lock:
+                task = self.store.get("tasks", key)
+                if task["cancel_requested"]:
+                    return
+                task.update(status="running", started_at=now())
+                self.store.save("tasks", task)
+            result = function(
+                lambda value=None, desc="": self.progress(key, value, desc)
+            )
+            self.progress(key, 1, "完成")
+            self._finish(key, "succeeded", result=result)
+        except Cancelled:
+            self._finish(key, "cancelled", message="已取消")
+        except Exception as error:
+            self._finish(key, "failed", error=str(error), message=str(error))
 
     def _finish(self, key, status, **fields):
         with self.finished:

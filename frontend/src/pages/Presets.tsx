@@ -3,7 +3,7 @@ import { Bookmark, Plus, Trash2 } from "react-feather";
 import { api, defaultGeneration, type Binding, type Generation, type Preset, type Role } from "../api";
 import { useAction, useLoad } from "../state";
 import { ago, confirm, Empty, Field, Page, PageHeader, Sheet } from "../ui";
-import { Bindings, GenerationParams } from "../widgets";
+import { Bindings, GenerationParams, MODE_LABELS } from "../widgets";
 
 type Draft = { id?: string; name: string; bindings: Binding[]; generation: Generation };
 const toDraft = (p?: Preset): Draft => ({ id: p?.id, name: p?.name || "", bindings: p?.bindings || [], generation: p?.generation || defaultGeneration });
@@ -37,7 +37,7 @@ export function Presets() {
                 <span className="flex items-center gap-2.5">
                   <Bookmark size={14} className="shrink-0 text-accent" />
                   <span className="truncate font-medium">{p.name}</span>
-                  <span className="chip">{p.generation.mode === "fast" ? "批次推理" : "普通推理"}</span>
+                  <span className="chip">{MODE_LABELS[p.generation.mode]}</span>
                 </span>
                 <span className="mt-1 flex flex-wrap gap-1 pl-6">
                   {p.bindings.map((b) => (
