@@ -105,11 +105,18 @@ class Sessions:
                     touched.append(session)
             self.tasks.ensure_idle([s["id"] for s in touched])
             presets = [p for p in self.store.list("presets") if any([change(b) for b in p["bindings"]])]
+            # API voices hold samples ids too; keep them on the moved files.
+            apis = [a for a in self.store.list("apis") if any(v["audio_id"] in audio_map for v in a["voices"])]
+            for api in apis:
+                for voice in api["voices"]:
+                    voice["audio_id"] = audio_map.get(voice["audio_id"], voice["audio_id"])
             for session in touched:
                 self.save(session, touch=False)
             for preset in presets:
                 self.store.save("presets", preset, touch=False)
-            return {"sessions": len(touched), "presets": len(presets)}
+            for api in apis:
+                self.store.save("apis", api, touch=False)
+            return {"sessions": len(touched), "presets": len(presets), "apis": len(apis)}
 
     def delete(self, key):
         with self.store.lock:

@@ -74,6 +74,21 @@ export interface Session extends Preset {
   outputs: string[];
   line_count?: number;
 }
+/* A saved voice of an API: a name callers pass as `voice`, bound to reference audio. */
+export interface Voice {
+  name: string;
+  audio_id: string;
+}
+/* External TTS endpoint at /tts/<slug>. Public: GET/POST, no auth. Private: POST + bearer token. */
+export interface ApiEndpoint extends Named {
+  slug: string;
+  access: "public" | "private";
+  enabled: boolean;
+  /* Set once the API has been private; kept across switches so clients can resume. */
+  token: string | null;
+  voices: Voice[];
+  generation: Generation;
+}
 export interface Task extends Named {
   kind: string;
   title: string;

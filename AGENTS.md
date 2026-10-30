@@ -33,6 +33,12 @@ Index tts webui (formerly webui3), now the repository root project. backend/ (Fa
       - 一个 session 包含一组角色预设、有声书文本、文本对应的 output。
       - session 有声书文本格式见 webui2 中的定义，需要对应的增删查改的接口。现在 session 的缓存文件读取都  output 目录中，你可以沿用此设计。
   c. 其他的你看看 webui2 目录补充，细节我也忘了一些
+  d. 外部 TTS API（已实现，侧栏「API」）
+    - 每个 API：`/tts/<slug>`，公开（GET / POST，无认证）或私有（仅 POST + `Authorization: Bearer <token>`），默认推理参数，可停用。
+    - `voice` 可用 API 中保存的音色名，也可用服务器上任意参考音频（id 或 samples 相对路径）；`GET /tts/<slug>/voices` 列出可用值。保存的音色只是快捷方式，不是白名单。
+    - API 生成的音频不保存：临时文件发送后即删除，不建 audio 记录；每次调用打印日志。
+    - POST 接受 JSON，也接受表单 / URL 参数（听书软件只能这样发送）。
+    - 听书配置：把保存的音色生成为 阅读（legado）、服务端阅读（hectorqin/reader，同 legado 格式）、爱阅记 的朗读引擎配置，格式参考 yy4382/tts-importer（`backend/profiles.py`）；支持网络导入 `/tts/<slug>/profile/<app>`。
 
 2. 界面设计
 

@@ -103,9 +103,39 @@ samples/
 - 「清理」删除不再需要的音频：可选「未使用的 Take 与已删除句子的音频」或「仅已删除句子的音频」。当前 Take 不会被删除。
 - 生成、合并、字幕都在右下角的任务面板中排队执行，可取消、查看详情、复制错误信息、清除记录。
 
+### API（供其他程序调用）
+
+在「API」中新建接口，每个接口有自己的地址 `/tts/<路径>`、默认推理参数和访问方式：
+
+- **公开**：`GET /tts/<路径>?voice=<音色>&text=<文本>`，或 POST JSON，无需认证。
+- **私有**：仅 `POST`，需带 `Authorization: Bearer <token>`；token 自动生成，可随时重新生成。
+
+POST 的参数可以是 JSON，也可以是表单字段或 URL 参数（`text`、`voice`），方便听书软件调用。
+
+```powershell
+curl -X POST http://127.0.0.1:7863/tts/live -H "Authorization: Bearer <token>" -H "Content-Type: application/json" `
+  -d '{"text": "你好", "voice": "kaveh", "generation": {"temperature": 0.9}}' -o out.wav
+```
+
+`voice` 可以是接口中保存的音色名（「生成链接」会为常用参考音频保存一个名字并给出可复制的链接 / curl 命令），也可以直接用**任意参考音频**：参考音频 id 或 samples 内的相对路径（如 `卡维/0 正常.wav`）。调用方可用 `GET /tts/<路径>/voices` 查询所有可用的 voice 值（已保存的音色、samples 路径、上传音频的 id；私有 API 需带 token），API 页右上角「调用说明」中的「可用参考音频」列表也可直接复制。请求在生成完成后返回 WAV（与界面共用任务队列，最多等待 10 分钟），调用记录出现在任务面板与 API 页的「最近调用」中，并打印在服务器控制台。生成的音频写入临时文件，发送给调用方后立即删除，不会保存。
+
+#### 听书配置（阅读 / 爱阅记 / 服务端阅读）
+
+每个 API 卡片的「听书配置」把**已保存的音色**生成为听书软件的在线朗读引擎（格式参考 [tts-importer](https://github.com/yy4382/tts-importer)）：
+
+| 软件 | 格式 | 导入方式 |
+|---|---|---|
+| 阅读（legado） | httpTTS JSON，每个音色一个引擎 | 手机上点「一键导入」（`legado://`）；或 朗读引擎 → ⋮ → 网络导入 粘贴链接；或本地导入下载的 JSON；单个音色可「粘贴源」 |
+| 服务端阅读（hectorqin/reader） | 同阅读 | 朗读设置的 HttpTTS 中网络导入链接或导入 JSON；reader 服务器需能访问本机地址 |
+| 爱阅记 | JxdAdvCustomTTS，所有音色合为一个语音库 | 在线语音库管理 → ⋮ → JSON 输入 中粘贴 |
+
+先在弹窗中填写「服务器地址」：听书软件访问本机的地址（如 `http://192.168.1.5:7863`），不能是 127.0.0.1。网络导入链接为 `/tts/<路径>/profile/legado`（私有 API 附带 `?token=`），配置中的地址取自软件实际访问的主机。私有 API 的配置包含 token，请勿公开。
+
+默认只监听 127.0.0.1；供局域网调用需 `uv run main.py --host 0.0.0.0`。注意此时 WebUI 本身（`/api`）也对局域网开放且没有认证，token 只保护 `/tts` 接口。
+
 ## 数据与备份
 
-WebUI 的所有数据（角色、预设、项目、Session、生成的音频、任务记录）保存在 `data/`，可用环境变量 `WEBUI3_DATA` 指向其他目录。备份时复制 `data/` 与 `samples/` 即可。
+WebUI 的所有数据（角色、预设、项目、Session、API、生成的音频、任务记录）保存在 `data/`，可用环境变量 `WEBUI3_DATA` 指向其他目录。备份时复制 `data/` 与 `samples/` 即可。
 
 ## 文档
 

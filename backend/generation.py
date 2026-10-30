@@ -1,5 +1,7 @@
 """Queue GPU work on the single task worker: speech, subtitles, session takes, merge."""
 
+import os
+import tempfile
 from pathlib import Path
 from .audio import title
 from .sessions import current_take, folder
@@ -17,18 +19,37 @@ class Generation:
         return self.tasks.submit("model-unload", self.engine.unload, title="卸载模型")
 
     def speech(self, request):
-        source = self.audio.path(request.audio_id)
+        return self.speak(request.audio_id, request.text, request.generation.model_dump())
+
+    def speak(self, audio_id, text, settings, kind="speech", label="", deliver=None):
+        """One sentence into outputs/; `label` prefixes the task title (API calls name their API).
+        With `deliver`, nothing is registered: the WAV is a temp file handed to deliver(path),
+        which owns it from then on (API calls delete it once sent)."""
+        source = self.audio.path(audio_id)
 
         def run(progress):
+            if deliver:
+                handle, name = tempfile.mkstemp(suffix=".wav")
+                os.close(handle)
+                path = Path(name)
+                try:
+                    self.engine.infer(source, text, path, settings, progress)
+                    size = path.stat().st_size
+                except BaseException:
+                    path.unlink(missing_ok=True)
+                    raise
+                deliver(path)
+                return {"size": size}
             path = self.audio.new_path(".wav", "outputs")
             try:
-                self.engine.infer(source, request.text, path, request.generation.model_dump(), progress)
-                return self.audio.register(path, title(request.text))
+                self.engine.infer(source, text, path, settings, progress)
+                return self.audio.register(path, title(text))
             except Exception:
                 path.unlink(missing_ok=True)
                 raise
 
-        return self.tasks.submit("speech", run, audio_ids=[request.audio_id], title=request.text[:80])
+        name = f"{label} · {text[:60]}" if label else text[:80]
+        return self.tasks.submit(kind, run, audio_ids=[audio_id], title=name)
 
     def subtitles(self, request):
         source = self.audio.path(request.audio_id)

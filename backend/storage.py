@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import RLock
 from uuid import uuid4
 
-KINDS = {"roles", "presets", "projects", "sessions", "audio", "tasks"}
+KINDS = {"roles", "presets", "projects", "sessions", "audio", "tasks", "apis"}
 
 
 def now():

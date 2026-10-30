@@ -11,6 +11,7 @@ data/
     merged/<id>.wav                          merge results
   roles/<role_id>.json                       role record
   presets/<preset_id>.json                   multi-speaker preset record
+  apis/<api_id>.json                         external TTS API record (/tts/<slug>)
   audio/<audio_id>.json                      audio record for non-take audio (no audio in this folder)
   audio/files/<id>.<ext>                     uploaded reference audio
   outputs/<id>.wav | <id>.srt                语音生成 / 字幕生成 results
@@ -99,6 +100,25 @@ No audio is stored. The API adds `audio_ids`: the files currently under `samples
 
 Same `bindings` / `generation` shapes as a session; copied into a session when it is created from the preset.
 
+### `apis/<id>.json`
+
+```json
+{
+  "name": "直播读弹幕", "slug": "live", "access": "public" | "private", "enabled": true,
+  "token": "…" | null,
+  "voices": [{ "name": "kaveh", "audio_id": "sample-…" }],
+  "generation": { … },
+  "id": "…", …
+}
+```
+
+- `slug`: the endpoint is `/tts/<slug>` (case-insensitive, unique).
+- `token`: generated the first time the API is private; kept when switching to public and back. Only checked for private APIs.
+- `voices`: saved voice names callers pass as `voice`; reference audio only (samples or uploads). A call may also name any reference audio by id or samples path, so this list is a convenience, not a whitelist. Renaming a role re-points voices whose file moved with its folder.
+- `generation`: defaults; a POST may override fields in its own `generation`.
+
+API calls are `api` tasks whose `result` is just `{ "size": <bytes> }`: the audio is a temp file deleted right after the response is sent (no audio record, nothing kept); each call is logged to the server console.
+
 ### `audio/<id>.json`
 
 One record per audio file other than takes (references, uploads, outputs, merges); bindings, snapshots, tasks and session `outputs` point to audio by this id.
@@ -125,7 +145,7 @@ An upload identical to an existing upload or samples file is not stored; the exi
 
 ```json
 {
-  "kind": "speech" | "subtitles" | "session-generate" | "merge" | "model-load" | "model-unload",
+  "kind": "speech" | "api" | "subtitles" | "session-generate" | "merge" | "model-load" | "model-unload",
   "title": "…", "status": "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted",
   "progress": 1, "message": "完成", "error": null, "cancel_requested": false,
   "session_ids": ["…"], "line_ids": ["…"], "audio_ids": ["<inputs>"], "result": { audio record } | null,

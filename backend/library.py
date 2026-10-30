@@ -36,24 +36,34 @@ class Library:
 
         Anonymous roles accept any audio: nothing to do. Otherwise every audio the role's
         bindings use must be in samples/<new name>/; after a rename, a file moved along with
-        its folder (same relative path) is mapped old id -> new id. Raises if any is missing."""
-        if request.anonymous:
-            return {}
+        its folder (same relative path) is mapped old id -> new id. Raises if any is missing.
+        API voices in the old folder are mapped too when their file moved, but never block."""
         old = self.store.get("roles", key)["name"]
         root = (SAMPLES / request.name).resolve()
-        folder = set(self.audio.folder(request.name))
+
+        def moved(audio_id):
+            record = self.store.get("audio", audio_id)
+            inside = record.get("source") == "samples" and record["path"].startswith(old + "/")
+            target = (root / record["path"][len(old) + 1 :]).resolve() if inside else None
+            return self.audio.sample(target)["id"] if target and target.is_relative_to(root) and target.is_file() else None
+
         mapping, missing = {}, []
+        if old != request.name:
+            for api in self.store.list("apis"):
+                for voice in api["voices"]:
+                    if voice["audio_id"] not in mapping and (target := moved(voice["audio_id"])):
+                        mapping[voice["audio_id"]] = target
+        if request.anonymous:
+            return mapping
+        folder = set(self.audio.folder(request.name))
         for binding in self.bindings_of(key):
             audio_id = binding.get("audio_id")
             if not audio_id or audio_id in folder or audio_id in mapping:
                 continue
-            record = self.store.get("audio", audio_id)
-            moved = record.get("source") == "samples" and record["path"].startswith(old + "/")
-            target = (root / record["path"][len(old) + 1 :]).resolve() if moved else None
-            if target and target.is_relative_to(root) and target.is_file():
-                mapping[audio_id] = self.audio.sample(target)["id"]
+            if target := moved(audio_id):
+                mapping[audio_id] = target
             else:
-                missing.append(record["name"])
+                missing.append(self.store.get("audio", audio_id)["name"])
         if missing:
             raise ValueError(
                 f"samples/{request.name}/ 中缺少 {len(set(missing))} 个已绑定的音频（如 {missing[0]}）。"

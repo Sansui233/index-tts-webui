@@ -2,7 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 from queue import Queue
-from threading import Thread
+from time import monotonic
+from threading import Condition, Thread
 from .storage import now
 
 ACTIVE = {"queued", "running"}
@@ -23,6 +24,7 @@ class Tasks:
         self.store = store
         self.queue = Queue()
         self.closed = False
+        self.finished = Condition()  # notified when a task reaches a final status
         with store.lock:
             expired = (datetime.now(timezone.utc) - KEEP).isoformat()
             for task in store.list("tasks"):
@@ -103,6 +105,16 @@ class Tasks:
             for key in t.get("audio_ids", [])
         }
 
+    def wait(self, key, timeout):
+        """Block until the task is no longer queued or running; the record, or None on timeout."""
+        deadline = monotonic() + timeout
+        with self.finished:
+            while (task := self.store.get("tasks", key))["status"] in ACTIVE:
+                if (remaining := deadline - monotonic()) <= 0:
+                    return None
+                self.finished.wait(min(remaining, 1))  # queued tasks cancelled directly skip _finish
+            return task
+
     def cancel(self, key):
         with self.store.lock:
             task = self.store.get("tasks", key)
@@ -147,7 +159,9 @@ class Tasks:
                 self.queue.task_done()
 
     def _finish(self, key, status, **fields):
-        self.store.update("tasks", key, {"status": status, "finished_at": now(), **fields})
+        with self.finished:
+            self.store.update("tasks", key, {"status": status, "finished_at": now(), **fields})
+            self.finished.notify_all()
 
     def close(self):
         with self.store.lock:

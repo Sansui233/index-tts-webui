@@ -377,8 +377,8 @@ export function NameInput({ value, onSave, label, className }: { value: string; 
   );
 }
 
-/* Copy text; the icon turns into a check for a moment. */
-export function CopyButton({ text, label = "复制", className }: { text: string; label?: string; className?: string }) {
+/* Copy text; the icon turns into a check for a moment. With children: a labelled button. */
+export function CopyButton({ text, label = "复制", className, children }: { text: string; label?: string; className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -398,6 +398,13 @@ export function CopyButton({ text, label = "复制", className }: { text: string
     }
     setCopied(true);
   }
+  if (children)
+    return (
+      <button className={cx("btn btn-sm", className)} onClick={() => void copy()}>
+        {copied ? <Check size={13} className="text-ok" /> : <Copy size={13} />}
+        {copied ? "已复制" : children}
+      </button>
+    );
   return (
     <button className={cx("tip btn btn-ghost btn-sm btn-icon", copied && "text-ok", className)} data-tip={copied ? "已复制" : label} aria-label={label} onClick={() => void copy()}>
       {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -405,12 +412,13 @@ export function CopyButton({ text, label = "复制", className }: { text: string
   );
 }
 
-/* Centered dialog. `wide`: a large editing surface with a fixed height. */
-export function Modal({ title, onClose, children, actions, footer, wide }: { title: ReactNode; onClose: () => void; children: ReactNode; actions?: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/* Centered dialog. `wide`: a large editing surface with a fixed height. Otherwise it fits its
+   content and scrolls; `width` replaces the default max-w-md (e.g. "max-w-3xl" for reading). */
+export function Modal({ title, onClose, children, actions, footer, wide, width = "max-w-md" }: { title: ReactNode; onClose: () => void; children: ReactNode; actions?: ReactNode; footer?: ReactNode; wide?: boolean; width?: string }) {
   useEscape(onClose);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 dark:bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={cx("card flex max-h-full w-full flex-col shadow-2xl", wide ? "h-[88vh] max-w-6xl" : "max-w-md")}>
+      <div className={cx("card flex max-h-[calc(100dvh-2rem)] w-full flex-col shadow-2xl", wide ? "h-[88vh] max-w-6xl" : width)}>
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-5">
           <h2 className="min-w-0 truncate text-[15px] font-semibold">{title}</h2>
           <div className="flex items-center gap-0.5">

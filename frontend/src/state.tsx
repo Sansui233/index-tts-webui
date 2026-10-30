@@ -3,7 +3,7 @@ import { api, isActive, taskTitle, type Task } from "./api";
 
 /* Hash routes: #/speech, #/projects/<id>/sessions/<id>, ... */
 export type Route =
-  | { page: "speech" | "subtitles" | "sessions" | "roles" | "presets" | "settings" }
+  | { page: "speech" | "subtitles" | "sessions" | "roles" | "presets" | "apis" | "settings" }
   | { page: "projects"; projectId?: string }
   | { page: "session"; sessionId: string; projectId?: string };
 
@@ -12,7 +12,7 @@ function parse(hash: string): Route {
   if (page === "projects" && b === "sessions" && c) return { page: "session", projectId: a, sessionId: c };
   if (page === "projects") return { page, projectId: a || undefined };
   if (page === "sessions" && a) return { page: "session", sessionId: a };
-  if (["subtitles", "sessions", "roles", "presets", "settings"].includes(page)) return { page } as Route;
+  if (["subtitles", "sessions", "roles", "presets", "apis", "settings"].includes(page)) return { page } as Route;
   return { page: "speech" };
 }
 

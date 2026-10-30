@@ -6,7 +6,7 @@ The WebUI is a single-process app: a FastAPI backend serves a REST API under `/a
 
 ```mermaid
 flowchart TD
-    HTTP[["HTTP /api"]] --> routes["routes.py<br/>build_router"]
+    HTTP[["HTTP /api · /tts"]] --> routes["routes.py<br/>build_router"]
     app["app.py<br/>create_app · services"] -. wires .-> routes
 
     routes --> generation["generation.py<br/>Generation"]
@@ -14,6 +14,9 @@ flowchart TD
     routes --> library["library.py<br/>Library"]
     routes --> audio["audio.py<br/>Audio"]
     routes --> tasks["tasks.py<br/>Tasks"]
+    routes --> apis["apis.py<br/>Apis"]
+    apis --> generation
+    routes --> profiles["profiles.py<br/>听书配置"]
     routes --> store
 
     generation --> tasks
@@ -58,6 +61,7 @@ flowchart TD
     Content --> Roles["pages/Roles"]
     Content --> Presets["pages/Presets"]
     Content --> Settings["pages/Settings"]
+    Content --> Apis["pages/Apis"]
     Content --> Sessions["pages/Sessions<br/>Sessions · Projects"]
     Content --> Editor["pages/SessionEditor"]
     Editor --> LineRow["pages/LineRow"]
@@ -102,6 +106,8 @@ sequenceDiagram
     UI->>R: GET /sessions/{id} (task status changed)
 ```
 
+An external API call (`GET|POST /tts/{slug}`) is the one synchronous wrapper around GPU work: `Apis.find` checks enabled / access / bearer token, `Apis.resolve` turns `voice` into a reference audio id (saved voice name → audio id → samples path), `Generation.speak` queues an `api` task, and the request thread blocks in `Tasks.wait` until the worker finishes it (10 min, then the task is cancelled and 504 returned), then answers with the WAV. The worker writes a system temp file and hands it over (`Handoff`); the response streams it and deletes it once sent, or it is deleted on arrival if the request already gave up. `Apis.synthesize` logs each call.
+
 Errors map uniformly: `ValueError` → 400, `Busy` (session has an active task) → 409, `KeyError` → 404; the frontend's `useAction` shows the `detail` as a toast.
 
 ### Consistency rules
@@ -119,13 +125,15 @@ Errors map uniformly: `ValueError` → 400, `Busy` (session has an active task) 
 |---|---|---|
 | `app.py` | `services`, `create_app` | Build the service graph, register error handlers and router, mount `frontend/dist`; on shutdown close the queue and unload the model. |
 | `storage.py` | `Store` | One JSON file per record under `data/<kind>/<id>.json` (`roles`, `presets`, `projects`, `sessions`, `audio`, `tasks`). Atomic temp-file replace, path containment checks, a shared `RLock` held across read-modify-write. `save(…, touch=False)` keeps `updated_at` for consistency fixes that are not user edits. |
-| `tasks.py` | `Tasks`, `Busy`, `Cancelled` | Single worker queue that owns all GPU use. Task records persist status/progress; on restart queued/running tasks become `interrupted` and untitled records get a fallback title. Cancellation is cooperative at `progress()` boundaries. `ensure_idle` guards sessions from edits during their tasks. `delete` removes finished records (selected or all); finished records older than 30 days are pruned at startup. |
+| `tasks.py` | `Tasks`, `Busy`, `Cancelled` | Single worker queue that owns all GPU use. Task records persist status/progress; on restart queued/running tasks become `interrupted` and untitled records get a fallback title. Cancellation is cooperative at `progress()` boundaries; `wait` blocks a caller until a task finishes. `ensure_idle` guards sessions from edits during their tasks. `delete` removes finished records (selected or all); finished records older than 30 days are pruned at startup. |
 | `engine.py` | `Engine` | Lazy IndexTTS adapter: `load` / `unload` / `infer` (normal or fast mode), guarded by a lock so the model loads once. `subtitles` unloads TTS first, then runs a local Whisper pipeline via ffmpeg and writes SRT. |
 | `audio.py` | `Audio` | Index of every playable/downloadable file as an `audio` record. `upload` (500 MB cap) returns an identical existing record instead of storing a second copy (`same_as`); `sample` / `import_source` / `folder` register samples files in place (`source: "samples"`, id hashed from the relative path); `file` / `path` resolve a record to disk; `referenced()` is the set of ids cleanup must never delete. Names: files from disk use their file name; generated audio has a display name without extension. |
 | `library.py` | `Library` | Roles (name, tags, `anonymous`) with their audio read from `samples/<name>/` (`view`); binding validation; `rebind_plan` for renames and mark changes; multi-speaker presets (`bindings` + generation params). |
 | `sessions.py` | `Sessions` | Projects → sessions → lines → takes. Line `index` is a stable, never-reused identity; order is the list order. Take lifecycle: `reserve` (snapshot + path) → `complete` (append, auto-select unless `revision`/`selection_revision` changed) → `select` → `cleanup` (non-current takes and/or orphans: `takes/<line_id>/` folders of lines the 台本 removed). `apply_script` replaces the line list; `delete_lines` removes lines with their take files; `archive` lists current takes of chosen lines for download; `rebind` rewrites bindings and take snapshots across all sessions and presets. `take_file` / `take_path` derive a take's audio file. |
 | `generation.py` | `Generation`, `title` | Turns requests into queued jobs: model load/unload, single speech, subtitles, session/line generation, and merge (pydub concat of current takes with `interval` gaps). `title` makes the extension-less display name of generated audio. |
-| `routes.py` | `build_router` | Thin HTTP layer. Small orchestration only: role updates apply `rebind_plan` then `rebind`; the selected-lines download zips `Sessions.archive` entries into a temp file removed after sending; task results are returned with the current audio record (so renames show); downloads append the real file suffix to display names. |
+| `apis.py` | `Apis`, `Denied` | External TTS endpoints: API records (slug, public/private, token, saved voices, default params), access checks (`Denied` → 401/404/405), voice resolution to any reference audio, the voice listing (`GET /tts/{slug}/voices`: saved names, samples paths, upload ids), and synthesize-and-wait. |
+| `profiles.py` | `profile`, `legado`, `ireadnote` | 听书配置: an API's saved voices as reader-app TTS engines, formats from yy4382/tts-importer. 阅读 (legado) and 服务端阅读 (hectorqin/reader) share legado's httpTTS JSON (one entry per voice; `{{encodeURIComponent(speakText)}}` in the URL, or for private APIs a form-body POST in legado's `url,{options}` with the bearer header); 爱阅记 gets one `JxdAdvCustomTTS` config with a `voiceList`. Served to the UI (`/api/apis/{id}/profile/{app}?base=`) and for 网络导入 (`/tts/{slug}/profile/{app}`, `?token=` for private, addresses from the host the app reached). |
+| `routes.py` | `build_router`, `build_tts_router` | Thin HTTP layer; `build_tts_router` is the external `/tts/{slug}` surface (streams the temp WAV and deletes it after sending, `X-Task-Id` header; POST reads JSON, or form fields / query parameters for reader apps, after the access check). Small orchestration only: role updates apply `rebind_plan` then `rebind`; the selected-lines download zips `Sessions.archive` entries into a temp file removed after sending; task results are returned with the current audio record (so renames show); downloads append the real file suffix to display names. |
 | `schemas.py` | `Generation`, `Role`, `Preset`, `SessionInput`, `Script`, `Speech`, … | Strict Pydantic inputs (`extra="forbid"`), including inference parameter bounds and defaults. |
 
 ## Frontend modules
@@ -148,4 +156,5 @@ Errors map uniformly: `ValueError` → 400, `Busy` (session has an active task) 
 | `pages/ScriptEditor` | `ScriptEditor` | 台本 modal: text on the left with invalid lines listed, live diff on the right (added / modified / deleted). Unapplied drafts persist per session in this browser. |
 | `pages/LineRow` | `LineRow`, `isStale` | Edit / reorder / delete a line, generate it, browse and select takes; flags takes whose snapshot no longer matches the current text, binding or params. |
 | `pages/SessionSettings` | `SessionSettings` | Session name, project, interval, bindings and params; save the bindings as a preset (same name overwrites). |
+| `pages/Apis` | `Apis` | External API management: one card per API with address, token (show / copy / regenerate), saved voices with copyable link (public) or curl command (private) and a test call through the real endpoint; 听书配置 modal (阅读 / 爱阅记 / 服务端阅读: server address, one-click `legado://` import, network-import link, copy, download, preview); settings sheet; 调用说明 modal (header button) with usage notes and a filterable list of every reference audio and its `voice` value; recent `api` tasks. |
 | `pages/Settings` | `Settings` | Model load/unload and data directory info. |

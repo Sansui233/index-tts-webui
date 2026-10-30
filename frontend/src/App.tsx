@@ -1,9 +1,10 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import { Activity, AlertCircle, ArrowLeft, CheckCircle, CheckSquare, ChevronRight, FileText, Folder, Mic, Monitor, Moon, Plus, Settings as Gear, Sun, Trash2, Users } from "react-feather";
+import { Activity, AlertCircle, ArrowLeft, CheckCircle, CheckSquare, ChevronRight, FileText, Folder, Link, Mic, Monitor, Moon, Plus, Settings as Gear, Sun, Trash2, Users } from "react-feather";
 import { api, isActive, taskTitle, type Named } from "./api";
 import { TaskItem } from "./TaskItem";
 import { AppProvider, go, useAction, useApp, useLoad, useRoute, useTheme, type Route } from "./state";
 import { ask, confirm, cx, Dialogs, Progress, Segmented, Sheet, Spinner } from "./ui";
+import { Apis } from "./pages/Apis";
 import { Presets } from "./pages/Presets";
 import { Roles } from "./pages/Roles";
 import { SessionEditor } from "./pages/SessionEditor";
@@ -63,6 +64,8 @@ function Content({ route, project, projects, reloadProjects }: { route: Route; p
       return <Roles />;
     case "presets":
       return <Presets />;
+    case "apis":
+      return <Apis />;
     case "settings":
       return <Settings />;
     case "sessions":
@@ -115,6 +118,9 @@ function MainMenu({ route }: { route: Route }) {
       </NavItem>
       <NavItem indent onClick={() => go("projects")} trailing={<ChevronRight size={14} className="text-muted" />}>
         项目管理
+      </NavItem>
+      <NavItem icon={<Link size={15} />} active={route.page === "apis"} onClick={() => go("apis")}>
+        API
       </NavItem>
     </>
   );

@@ -5,11 +5,13 @@ import tempfile
 import zipfile
 from types import SimpleNamespace
 from typing import Literal
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from . import schemas as S
 from .audio import title
+from .profiles import profile
 from .engine import WHISPER_MODELS, whisper_path
 from .sessions import find_line
 
@@ -21,7 +23,7 @@ CLEANUP = {"all": {"unused": True, "orphans": True}, "orphans": {"unused": False
 
 def build_router(app: SimpleNamespace):
     store, audio, tasks, engine = app.store, app.audio, app.tasks, app.engine
-    library, sessions, generation = app.library, app.sessions, app.generation
+    library, sessions, generation, apis = app.library, app.sessions, app.generation, app.apis
     api = APIRouter(prefix="/api")
 
     # System, model and tasks
@@ -183,6 +185,34 @@ def build_router(app: SimpleNamespace):
         store.delete("presets", key)
         return DELETED
 
+    # External TTS APIs (served at /tts/<slug>, see build_tts_router)
+
+    @api.get("/apis")
+    def list_apis():
+        return store.list("apis", newest=True)
+
+    @api.post("/apis")
+    def create_api(request: S.Api):
+        return apis.save(request)
+
+    @api.put("/apis/{key}")
+    def update_api(key: str, request: S.Api):
+        return apis.save(request, key)
+
+    @api.get("/apis/{key}/profile/{app}")
+    def api_profile(key: str, app: str, base: str):
+        """听书配置 for a reader app; `base` is the server address the app will call."""
+        return profile(store.get("apis", key), app, base)
+
+    @api.post("/apis/{key}/token")
+    def regenerate_token(key: str):
+        return apis.regenerate_token(key)
+
+    @api.delete("/apis/{key}")
+    def delete_api(key: str):
+        store.delete("apis", key)
+        return DELETED
+
     # Projects
 
     @api.get("/projects")
@@ -320,3 +350,52 @@ def build_router(app: SimpleNamespace):
         return FileResponse(name, filename=filename, background=BackgroundTask(os.unlink, name))
 
     return api
+
+
+def build_tts_router(app: SimpleNamespace):
+    """The external surface: synthesize one text with an API's settings and answer with the
+    WAV once it is generated (the job runs on the shared queue, after any work ahead of it).
+    The temp WAV is deleted once sent, never stored. Public APIs take GET or POST without
+    auth; private ones POST with `Authorization: Bearer`. POST takes a JSON body, or form
+    fields / query parameters (text, voice), which is what reader apps can send."""
+    apis = app.apis
+    tts = APIRouter(prefix="/tts", tags=["external TTS"])
+
+    def respond(result):
+        task, path = result
+        if task is None:
+            raise HTTPException(504, "生成超时，任务已取消")
+        if task["status"] != "succeeded" or path is None:
+            raise HTTPException(500 if task["status"] == "failed" else 503, task["error"] or task["message"])
+        # Streamed from the temp file, which is deleted right after it is sent.
+        cleanup = BackgroundTask(path.unlink, missing_ok=True)
+        return FileResponse(path, media_type="audio/wav", headers={"X-Task-Id": task["id"]}, background=cleanup)
+
+    @tts.get("/{slug}/voices")
+    def list_voices(slug: str, authorization: str | None = Header(None)):
+        return apis.voices(apis.find(slug, "GET", authorization, listing=True))
+
+    @tts.get("/{slug}/profile/{app}")
+    def network_profile(slug: str, app: str, request: Request, token: str | None = None, authorization: str | None = Header(None)):
+        """听书配置 for 网络导入: the app fetches it by URL, so a private API's token may come
+        as ?token= (it is in the config anyway). Addresses use the host the app reached."""
+        api = apis.find(slug, "GET", authorization or (token and f"Bearer {token}"), listing=True)
+        return profile(api, app, str(request.base_url))
+
+    @tts.get("/{slug}", response_class=FileResponse)
+    def speak_get(slug: str, text: str, voice: str, authorization: str | None = Header(None)):
+        api = apis.find(slug, "GET", authorization)
+        request = S.TtsRequest(text=text, voice=voice)
+        return respond(apis.synthesize(api, request.text, request.voice))
+
+    @tts.post("/{slug}", response_class=FileResponse)
+    async def speak_post(slug: str, request: Request, authorization: str | None = Header(None)):
+        api = apis.find(slug, "POST", authorization)  # before reading the body
+        if "json" in request.headers.get("content-type", ""):
+            body = S.TtsRequest(**await request.json())
+        else:
+            fields = {**request.query_params, **(await request.form())}
+            body = S.TtsRequest(text=fields.get("text", ""), voice=fields.get("voice", ""))
+        return respond(await run_in_threadpool(apis.synthesize, api, body.text, body.voice, body.generation))
+
+    return tts
