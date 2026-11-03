@@ -93,7 +93,8 @@ class TextNormalizer:
         # wetext ships prebuilt FSTs (kaldifst); no pynini/WeTextProcessing needed.
         from wetext import Normalizer
 
-        self.zh_normalizer = Normalizer(remove_erhua=False, lang="zh", operator="tn")
+        self.zh_normalizer = Normalizer(remove_erhua=False, lang="zh", operator="tn",
+                                        traditional_to_simple=True, full_to_half=True)
         self.en_normalizer = Normalizer(lang="en", operator="tn")
 
     def normalize(self, text: str) -> str:
