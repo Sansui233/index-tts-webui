@@ -104,21 +104,27 @@ export const MODE_LABELS: Record<Generation["mode"], string> = { normal: "普通
 const hidden = (key: keyof Generation, mode: Generation["mode"]) =>
   (key === "sentences_bucket_max_size" && mode !== "fast") || (key === "length_penalty" && mode === "batch");
 
-export function GenerationParams({ value, onChange, open: initial = false }: { value: Generation; onChange: (g: Generation) => void; open?: boolean }) {
+/* `locked`: the caller always runs this mode (API calls are always batch), so no selector. */
+export function GenerationParams({ value, onChange, open: initial = false, locked }: { value: Generation; onChange: (g: Generation) => void; open?: boolean; locked?: Generation["mode"] }) {
   const [open, setOpen] = useState(initial);
   const set = (patch: Partial<Generation>) => onChange({ ...value, ...patch });
+  const mode = locked || value.mode;
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <Segmented
-          value={value.mode}
-          onChange={(mode) => set({ mode })}
-          options={[
-            { value: "normal", label: MODE_LABELS.normal },
-            { value: "fast", label: MODE_LABELS.fast, title: "长文本更快" },
-            { value: "batch", label: MODE_LABELS.batch, title: "多句同时解码，不排队；Beams 作为 best-of-N 采样。台本批量生成最快" },
-          ]}
-        />
+        {locked ? (
+          <span className="chip">{MODE_LABELS[locked]}</span>
+        ) : (
+          <Segmented
+            value={value.mode}
+            onChange={(mode) => set({ mode })}
+            options={[
+              { value: "normal", label: MODE_LABELS.normal },
+              { value: "fast", label: MODE_LABELS.fast, title: "长文本更快" },
+              { value: "batch", label: MODE_LABELS.batch, title: "多句同时解码，不排队；Beams 作为 best-of-N 采样。台本批量生成最快" },
+            ]}
+          />
+        )}
         <button className="btn btn-ghost btn-sm" onClick={() => setOpen(!open)}>
           <Sliders size={13} />
           高级参数
@@ -131,8 +137,8 @@ export function GenerationParams({ value, onChange, open: initial = false }: { v
             <input type="checkbox" className="accent-[var(--accent)]" checked={value.do_sample} onChange={(e) => set({ do_sample: e.target.checked })} />
             启用采样（do_sample）
           </label>
-          {NUMBERS.filter(([key]) => !hidden(key, value.mode)).map(([key, label, step]) => (
-            <Field key={key} label={key === "num_beams" && value.mode === "batch" ? "Best-of-N" : label}>
+          {NUMBERS.filter(([key]) => !hidden(key, mode)).map(([key, label, step]) => (
+            <Field key={key} label={key === "num_beams" && mode === "batch" ? "Best-of-N" : label}>
               <input className="input h-7 tabular-nums" type="number" step={step} value={value[key] as number} onChange={(e) => set({ [key]: Number(e.target.value) })} />
             </Field>
           ))}

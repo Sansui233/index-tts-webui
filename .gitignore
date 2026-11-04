@@ -27,3 +27,7 @@ _legacy/
 .vscode/
 .zed/
 *.DS_Store
+# book build
+docs/book/node_modules/
+docs/book/dist/
+docs/book/bundle.html

@@ -17,7 +17,7 @@ const toDraft = (a?: ApiEndpoint): Draft => ({
   voices: a?.voices || [],
   generation: a?.generation || defaultGeneration,
 });
-const body = (a: Draft | ApiEndpoint) => ({ name: a.name, slug: a.slug, access: a.access, enabled: a.enabled, voices: a.voices, generation: a.generation });
+const body = (a: Draft | ApiEndpoint) => ({ name: a.name, slug: a.slug, access: a.access, enabled: a.enabled, voices: a.voices, generation: { ...a.generation, mode: "batch" as const } });
 
 const endpoint = (a: ApiEndpoint) => `${location.origin}/tts/${a.slug}`;
 /* What to copy for a voice: public, a GET link to append text to; private, a curl call. */
@@ -308,8 +308,8 @@ function ApiEditor({ draft: initial, onClose, onSaved }: { draft: Draft; onClose
           启用（停用后地址返回 404，配置保留）
         </label>
         <div>
-          <span className="label">推理参数（调用方可在 POST 的 generation 中逐项覆盖；API 总是并发推理，所选模式不生效，Beams 表示 best-of-N）</span>
-          <GenerationParams value={draft.generation} onChange={(generation) => setDraft({ ...draft, generation })} />
+          <span className="label">推理参数（调用方可在 POST 的 generation 中逐项覆盖；API 总是并发推理）</span>
+          <GenerationParams locked="batch" value={draft.generation} onChange={(generation) => setDraft({ ...draft, generation })} />
         </div>
       </div>
     </Sheet>
